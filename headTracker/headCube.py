@@ -262,20 +262,51 @@ def square_face(landmarks, annotated_img):
     return top_left, bottom_right
 
 
+# now it actually make it a cube
 def plot_face(annotated_img, results):
+    GREEN = (127,225, 0)
+    PURPLE = (0,255,127)
     
     top_left, bottom_right = square_face(results, annotated_img)        
-    cv2.rectangle(annotated_img, pt1=top_left, pt2=bottom_right, color=(127, 255, 0))
+    cv2.rectangle(annotated_img, pt1=top_left, pt2=bottom_right, thickness=4, color=(127, 255, 0))
 
-        # center of face rectangle
-    rectangle_center = ((top_left[0] + bottom_right[0]) // 2, (top_left[1] + bottom_right[1])// 2)
-    cv2.circle(annotated_img, center=rectangle_center, radius=4, thickness=4, color = (0, 255, 127))
+    # center of face rectangle
+    rectangle_center = np.array([(top_left[0] + bottom_right[0]) / 2, (top_left[1] + bottom_right[1])/ 2], dtype = int)
+    cv2.circle(annotated_img, center=rectangle_center, radius=4, thickness=4, color = (0, 255, 127)) #COLORED 
 
     # nose
     np_landmark = landmark_to_np(results[4], w, h)
     nose_center  = (int(np_landmark[0]), int(np_landmark[1]))
     cv2.circle(annotated_img, center=nose_center, radius=4, thickness=4, color=(255, 0, 127))
-    cv2.line(annotated_img, pt1=rectangle_center, pt2=nose_center, thickness=3, color=(127, 0, 127))
+    cv2.line(annotated_img, pt1=rectangle_center, pt2=nose_center, thickness=3, color=(127, 0, 127)) # COLORED purple
+
+    # drawing the square silloute but using the nose as the center index
+    diff = nose_center - rectangle_center
+    
+
+    nose_top_left = top_left + diff
+    nose_bottom_right = bottom_right + diff
+    cv2.rectangle(annotated_img, pt1=nose_top_left, pt2=nose_bottom_right, thickness= 4, color=GREEN)
+
+    # head_w = bottom_right[0] - top_left[0]
+    # head_h = top_left[1] - bottom_right[1]
+
+
+    top_right = np.array([top_left[0],bottom_right[1]],dtype=int)
+    bottom_left = np.array([bottom_right[0],top_left[1]],dtype=int)
+
+    nose_top_right = top_right + diff
+    nose_bottom_left = bottom_left + diff
+
+    cv2.line(annotated_img, top_left, nose_top_left, thickness=4, color=GREEN)
+    cv2.line(annotated_img, bottom_right, nose_bottom_right, thickness=4, color=GREEN)
+
+    cv2.line(annotated_img, top_right, nose_top_right, thickness=4, color=GREEN)
+    cv2.line(annotated_img, bottom_left, nose_bottom_left, thickness=4, color=GREEN)
+
+    
+
+
 
     return annotated_img
 
