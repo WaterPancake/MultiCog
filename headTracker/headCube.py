@@ -46,8 +46,8 @@ face_mesh = mp_face_mesh.FaceMesh(
     static_image_mode=False,
     max_num_faces=1,
     refine_landmarks=True,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5
+    min_detection_confidence=0.8,
+    min_tracking_confidence=0.8
 )
 
 """
@@ -76,6 +76,7 @@ HELPER FUNCTIONS:
 
 LEFT_EYE = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
 
+# still not used
 def gaze_direction(eye_points, iris_center):
     
     left_point = min(eye_points, key=lambda p: p[0])
@@ -90,24 +91,19 @@ def gaze_direction(eye_points, iris_center):
 
 
 def get_gaze_vector(eye_points, iris_center):
-    eye_center = np.mean(eye_points, axis=0).astype(int) # taking average of all eye 
+    eye_center = np.mean(eye_points, axis=0).astype(int) # taking average of all eye points
 
-    gaze_vector = (
+    gaze_vector = np.array([
         iris_center[0] - eye_center[0],
         iris_center[1] - eye_center[1]
-    )
+    ], dtype=float)
 
     return eye_center, gaze_vector
 
 def draw_gaze_projection(frame, eye_center, gaze_vector, magnitude = 10):
+    projection_point = np.array(eye_center + gaze_vector * magnitude, dtype=int)
 
-
-    projection_point = (
-       int(eye_center[0] + gaze_vector[0] * magnitude),
-       int(eye_center[1] + gaze_vector[1] * magnitude)        
-    )
-
-    cv2.arrowedLine(frame, tuple(eye_center), tuple(projection_point), thickness=3, color=YELLOW)
+    cv2.arrowedLine(frame, tuple(eye_center), tuple(projection_point), color=YELLOW, thickness=3)
 
 def square_face(landmarks, annotated_img):
     h, w, _ = annotated_img.shape
@@ -175,32 +171,37 @@ def draw_eyes(frame, eye_points, eye_center, iris_points, iris_center, color):
 
 
 """
-focal point is [x,y]
+using math from: https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
 """
-def gaze_focus(left_iris, left_eye, right_iris, right_eye):
+def gaze_interception(left_iris, left_eye, right_iris, right_eye):
+    x_1, y_1 = left_iris
+    x_2, y_2 = left_eye
+    x_3, y_3 = right_iris
+    x_4, y_4 = right_eye
 
-    # calculate the determinate of the the 4x4 matrix, if 
-    A_1 = left_iris[1] - left_eye[1]
-    B_1 = left_iris[0] - left_eye[0]
-    C_1 = (A_1 * left_iris[0]) + (B_1 * left_iris[1])
+    # P_x = (x_1 * y_2 - y_1 * x_2) - (x_1 - x_2) * (x_3 * y_4 - y_3 * x_4) / (x_1 - x_2) * (y_3 - y_4) - (y_1 - y_2) * (x_3 - x_4)
 
-    A_2 = right_iris[1] - right_eye[1]
-    B_2 = right_iris[0] - right_eye[0]
-    C_2 = (A_1 * right_iris[0]) + (B_1 * right_iris[1])
-
-    D = (A_1 * B_2) - (A_2 * B_1)
+    # P_y = (x_1 * y_2 - y_1 * x_1) * (y_3 - y_4) - (y_1 - y_2) * (x_3 * y_4 - y_3 * x_4) / (x_1 - x_2) * (y_3 - y_4) - (y_1 - y_2) * (x_3 - x_4)
 
 
-    if(D == 0):
-        # lines are parallel or the sam
-        return None
-    else:
-        focal_x = (C_1 * B_2 - C_2 * B_1) / D
-        focal_y = (C_2 * A_1 - C_1 * A_2) / D
-        return np.array([focal_x, focal_y], dtype=int)
+    # return np.array([P_x, P_y], dtype=int)
+
+    t = (x_1 - x_3) * (y_3 - y_4) - (y_1 - y_2) * (x_3 - x_4) / (x_1 - x_2) * (y_3 - y_4) - (y_1 - y_2) * (x_3 - x_4)
+    
+    u  = - (x_1 - x_2) * (y_1 - y_3) - (y_1 - y_2) * (x_1 - x_3) / (x_1 - x_2) * (y_3 -y_4) - (y_1 - y_2) * (x_3 - x_4)
 
 
-    # Compare a methord for slop intercept?
+    # P_x = x_1 + t * (x_2 - x_1)
+    # P_y = y_1 + t * (y_2 - y_1)
+
+    # alternative
+    P_x = x_3 + u * (x_4 - x_3)
+    P_y = y_3 + u * (y_4 - y_3)
+
+    # print(P_x, P_y)
+
+    return np.array([P_x, P_y], dtype=int)
+
 
 
 
@@ -248,7 +249,7 @@ while cap.isOpened():
         # draw_eyes(annotated_img, left_eye_points, left_eye_center, left_iris_points, left_iris_center, color=RED)
         
         
-        draw_gaze_projection(annotated_img, left_eye_center, left_gaze_vector, magnitude=10)
+        draw_gaze_projection(annotated_img, left_eye_center, left_gaze_vector, magnitude=20)
 
         right_eye_points = landmarks_to_np(results, RIGHT_EYE, w, h)
         right_iris_points = landmarks_to_np(results, RIGHT_IRIS, w, h)
@@ -260,19 +261,37 @@ while cap.isOpened():
         # draw_eyes(annotated_img, right_eye_points, right_eye_center, right_iris_points, right_iris_center, color=RED)
         
         
-        draw_gaze_projection(annotated_img, right_eye_center, right_gaze_vector, magnitude=10)
+        draw_gaze_projection(annotated_img, right_eye_center, right_gaze_vector, magnitude=20)
         
         # putting a cube on the face
         annotated_img = plot_face(annotated_img, results)
 
 
-        # plotting gaze interception
-        gaze_focal = gaze_focus(left_iris_center, left_eye_center, right_iris_center, right_eye_center)
+        # # plotting gaze interception
+        # B = gaze_interception(left_iris_center, left_eye_center, right_iris_center, right_eye_center)
+        # if B is not None:
+        #     cv2.circle(annotated_img, tuple(B), radius=15, thickness=5, color=(125, 255, 0))
+        #     cv2.putText(annotated_img, "B", tuple(B), fontFace=cv2.LINE_AA,fontScale=10, color=(125,255,0))
 
-        if gaze_focal is not None:
-            cv2.circle(annotated_img, tuple(gaze_focal), radius = 4, thickness = 2, color=(0,255,127))
-        
-    
+
+        """
+        pt_1 and pt_2 are shape [,2] 
+        """
+        def dist(pt_1, pt_2):
+            x_sd = pow( pt_1[0], pt_2[0], 2)
+            y_sd = pow( pt_1[1], pt_2[1], 2)
+
+            return int(math.sqrt(x_sd + y_sd))
+
+
+        # sorting by x_value        
+        # left_of_left_eye = min(left_eye_points, key=lambda v: v[0])
+        # right_of_left_eye = max(left_eye_points, key=lambda v: v[0])
+        # left_eye_radius = dist(left_of_left_eye, right_of_left_eye)
+            
+        # JOES_draw_gaze(annotated_img, left_eye_center, left_iris_center, YELLOW, 500)    
+
+
         cv2.imshow("Face Outline", annotated_img)
     else:
         continue
